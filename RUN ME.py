@@ -1,6 +1,6 @@
-# main.py
 import sys
 import os
+import tkinter as tk
 from pathlib import Path
 
 # Add code directory to Python path

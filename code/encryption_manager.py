@@ -1,4 +1,3 @@
-# code/encryption_manager.py
 import base64
 import hashlib
 import shutil
@@ -11,7 +10,6 @@ from typing import Tuple, Union
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
 
@@ -332,6 +330,8 @@ class EncryptionManager:
 
         except Exception as e:
             return {"error": str(e)}
+
+
 
 
 

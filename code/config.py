@@ -1,4 +1,3 @@
-# code/config.py
 import os
 import json
 import logging
@@ -44,7 +43,7 @@ class Config:
             "version": "2.0.0",
             "first_run": True,
             "last_used": None,
-            "theme": "default",
+            "theme": "dark",
             "auto_hide_files": True,
             "backup_count": 3,
             "log_level": "INFO"
@@ -233,6 +232,7 @@ class Config:
             "first_run": self.config.get("first_run", True),
             "last_used": self.config.get("last_used")
         }
+
 
 
 
