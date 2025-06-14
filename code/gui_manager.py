@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+import webbrowser
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -21,6 +22,200 @@ def get_resource_path(relative_path: str) -> str:
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+
+class EnhancedPasswordDialog:
+    """Enhanced password dialog with strength indicator"""
+
+    def __init__(self, parent, title, message, show_strength=False):
+        self.result = None
+        self.show_strength = show_strength
+
+        # Create dialog window
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(title)
+        self.dialog.geometry("400x300" if show_strength else "400x200")
+        self.dialog.resizable(False, False)
+        self.dialog.grab_set()
+        self.dialog.transient(parent)
+
+        # Center on parent
+        self.center_on_parent(parent)
+
+        # Create widgets
+        self.create_widgets(message)
+
+        # Focus on password entry
+        self.password_entry.focus_set()
+
+        # Bind events
+        self.dialog.bind('<Return>', lambda e: self.ok_clicked())
+        self.dialog.bind('<Escape>', lambda e: self.cancel_clicked())
+
+    def center_on_parent(self, parent):
+        """Center dialog on parent window"""
+        parent.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - 200
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - 100
+        self.dialog.geometry(f"+{x}+{y}")
+
+    def create_widgets(self, message):
+        """Create dialog widgets"""
+        main_frame = ttk.Frame(self.dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Message label
+        ttk.Label(main_frame, text=message, font=('Segoe UI', 10)).pack(pady=(0, 15))
+
+        # Password frame
+        password_frame = ttk.Frame(main_frame)
+        password_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(password_frame, text="Password:").pack(anchor=tk.W)
+
+        self.password_var = tk.StringVar()
+        self.password_entry = ttk.Entry(password_frame, textvariable=self.password_var,
+                                        show="*", font=('Segoe UI', 10))
+        self.password_entry.pack(fill=tk.X, pady=(5, 0))
+
+        # Show/hide password toggle
+        self.show_password_var = tk.BooleanVar()
+        show_password_cb = ttk.Checkbutton(password_frame, text="Show password",
+                                           variable=self.show_password_var,
+                                           command=self.toggle_password_visibility)
+        show_password_cb.pack(anchor=tk.W, pady=(5, 0))
+
+        # Password strength indicator (if enabled)
+        if self.show_strength:
+            self.create_strength_indicator(main_frame)
+
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(15, 0))
+
+        ttk.Button(button_frame, text="Cancel", command=self.cancel_clicked).pack(side=tk.RIGHT)
+        ttk.Button(button_frame, text="OK", command=self.ok_clicked).pack(side=tk.RIGHT, padx=(0, 10))
+
+    def create_strength_indicator(self, parent):
+        """Create password strength indicator"""
+        strength_frame = ttk.LabelFrame(parent, text="Password Strength", padding="10")
+        strength_frame.pack(fill=tk.X, pady=(10, 0))
+
+        self.strength_var = tk.StringVar(value="Enter password to see strength")
+        self.strength_label = ttk.Label(strength_frame, textvariable=self.strength_var)
+        self.strength_label.pack()
+
+        # Progress bar for strength
+        self.strength_progress = ttk.Progressbar(strength_frame, length=300, mode='determinate')
+        self.strength_progress.pack(fill=tk.X, pady=(5, 0))
+
+        # Requirements checklist
+        self.requirements_frame = ttk.Frame(strength_frame)
+        self.requirements_frame.pack(fill=tk.X, pady=(10, 0))
+
+        requirements = [
+            "At least 8 characters",
+            "Contains uppercase letter",
+            "Contains lowercase letter",
+            "Contains numbers",
+            "Contains special characters"
+        ]
+
+        self.requirement_vars = []
+        for req in requirements:
+            var = tk.StringVar(value=f"❌ {req}")
+            self.requirement_vars.append(var)
+            ttk.Label(self.requirements_frame, textvariable=var, font=('Segoe UI', 8)).pack(anchor=tk.W)
+
+        # Bind password change event
+        self.password_var.trace('w', self.check_password_strength)
+
+    def check_password_strength(self, *args):
+        """Check and update password strength"""
+        password = self.password_var.get()
+
+        if not password:
+            self.strength_var.set("Enter password to see strength")
+            self.strength_progress['value'] = 0
+            for i, var in enumerate(self.requirement_vars):
+                requirements = [
+                    "At least 8 characters",
+                    "Contains uppercase letter",
+                    "Contains lowercase letter",
+                    "Contains numbers",
+                    "Contains special characters"
+                ]
+                var.set(f"❌ {requirements[i]}")
+            return
+
+        # Check requirements
+        checks = [
+            len(password) >= 8,
+            any(c.isupper() for c in password),
+            any(c.islower() for c in password),
+            any(c.isdigit() for c in password),
+            any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password)
+        ]
+
+        requirements = [
+            "At least 8 characters",
+            "Contains uppercase letter",
+            "Contains lowercase letter",
+            "Contains numbers",
+            "Contains special characters"
+        ]
+
+        # Update requirement labels
+        for i, (check, var) in enumerate(zip(checks, self.requirement_vars)):
+            symbol = "✅" if check else "❌"
+            var.set(f"{symbol} {requirements[i]}")
+
+        # Calculate strength
+        strength = sum(checks)
+        strength_percent = (strength / len(checks)) * 100
+        self.strength_progress['value'] = strength_percent
+
+        if strength <= 2:
+            strength_text = "Weak"
+            color = "red"
+        elif strength <= 3:
+            strength_text = "Fair"
+            color = "orange"
+        elif strength <= 4:
+            strength_text = "Good"
+            color = "blue"
+        else:
+            strength_text = "Strong"
+            color = "green"
+
+        self.strength_var.set(f"Password strength: {strength_text}")
+
+    def toggle_password_visibility(self):
+        """Toggle password visibility"""
+        if self.show_password_var.get():
+            self.password_entry.config(show="")
+        else:
+            self.password_entry.config(show="*")
+
+    def ok_clicked(self):
+        """Handle OK button click"""
+        password = self.password_var.get()
+        if not password:
+            messagebox.showwarning("Warning", "Please enter a password!")
+            return
+
+        self.result = password
+        self.dialog.destroy()
+
+    def cancel_clicked(self):
+        """Handle Cancel button click"""
+        self.result = None
+        self.dialog.destroy()
+
+    def get_password(self):
+        """Get the entered password"""
+        self.dialog.wait_window()
+        return self.result
 
 
 class ModernGUI:
@@ -542,69 +737,72 @@ class ModernGUI:
             messagebox.showwarning("Warning", "Another operation is in progress. Please wait...")
             return
 
-        file_types = [("Locked Folders", "*.locked"), ("All Files", "*.*")]
+        # File dialog for encrypted files
         encrypted_file = filedialog.askopenfilename(
-            title="Select locked file to unlock",
-            filetypes=file_types
+            title="Select encrypted folder file",
+            filetypes=[("Locked Files", "*.locked"), ("All Files", "*.*")]
         )
 
         if not encrypted_file:
             return
 
         encrypted_path = Path(encrypted_file)
-        folder_name = encrypted_path.stem
+
+        # Validate file
+        if not encrypted_path.exists():
+            messagebox.showerror("Error", "Selected file does not exist!")
+            return
+
+        if not encrypted_path.is_file():
+            messagebox.showerror("Error", "Selected path is not a file!")
+            return
 
         # Get file info
-        file_info = self.encryption_manager.get_file_info(encrypted_file)
+        file_info = self.encryption_manager.get_file_info(encrypted_path)
         if "error" in file_info:
-            messagebox.showerror("Error", f"Cannot read file: {file_info['error']}")
+            messagebox.showerror("Error", f"Invalid encrypted file: {file_info['error']}")
             return
 
         # Show file info
         size_mb = file_info['size'] / (1024 * 1024)
-        info_text = f"File: {file_info['filename']}\nSize: {size_mb:.2f} MB\nVersion: {file_info['version']}"
+        created_date = datetime.fromtimestamp(file_info['created']).strftime("%Y-%m-%d %H:%M")
+
+        info_text = f"File: {file_info['filename']}\n"
+        info_text += f"Folder: {file_info['folder_name']}\n"
+        info_text += f"Size: {size_mb:.2f} MB\n"
+        info_text += f"Created: {created_date}\n"
+        info_text += f"Version: {file_info['version']}"
 
         if not messagebox.askyesno("Confirm Unlock", f"Unlock this folder?\n\n{info_text}"):
             return
-
-        # Get stored password hash
-        stored_hash = self.config.get_password_hash(folder_name)
 
         # Password dialog
         password_dialog = EnhancedPasswordDialog(
             self.root,
             "Enter Password",
-            f"Enter password to unlock '{folder_name}':"
+            f"Enter password to unlock '{file_info['folder_name']}':"
         )
         password = password_dialog.get_password()
 
         if not password:
             return
 
-        # Verify password if stored
-        if stored_hash and not self.encryption_manager.verify_password(password, stored_hash):
-            if not messagebox.askyesno("Password Warning",
-                                       "Password doesn't match stored hash. This may be due to:\n"
-                                       "• Incorrect password\n"
-                                       "• Different password used\n"
-                                       "• Corrupted password data\n\n"
-                                       "Attempt decryption anyway?"):
-                return
-
         # Decrypt in thread
-        self.run_in_thread(self._decrypt_folder_thread, encrypted_file, password, folder_name)
+        self.run_in_thread(self._decrypt_folder_thread, encrypted_file, password)
 
-    def _decrypt_folder_thread(self, encrypted_file: str, password: str, folder_name: str):
+    def _decrypt_folder_thread(self, encrypted_file: str, password: str):
         """Enhanced folder decryption thread"""
         try:
+            folder_name = Path(encrypted_file).stem
+
             # Update UI
             self.root.after(0, lambda: self.set_processing_state(True, "Decrypting folder..."))
             self.root.after(0, lambda: self.add_info(f"🔄 Starting decryption: {folder_name}", "info"))
 
             # Perform decryption
-            restored_folder = self.encryption_manager.decrypt_folder(encrypted_file, password)
+            decrypted_folder = self.encryption_manager.decrypt_folder(encrypted_file, password)
 
-            # Remove saved password
+            # Remove password from storage
             self.config.remove_password(folder_name)
 
             # Add to history
@@ -612,99 +810,81 @@ class ModernGUI:
 
             # Update UI on success
             self.root.after(0, lambda: self.set_processing_state(False))
-            self.root.after(0, lambda: self.add_info(f"✅ Folder unlocked successfully: {Path(restored_folder).name}",
-                                                     "success"))
+            self.root.after(0, lambda: self.add_info(f"✅ Folder decrypted successfully: {folder_name}", "success"))
             self.root.after(0, lambda: self.refresh_stats())
             self.root.after(0, lambda: messagebox.showinfo(
                 "Success",
-                f"Folder unlocked successfully!\n\n"
-                f"Location: {restored_folder}"
+                f"Folder '{folder_name}' has been unlocked successfully!\n\n"
+                f"Restored to: {Path(decrypted_folder).name}"
             ))
 
         except Exception as e:
             error_msg = str(e)
             self.root.after(0, lambda: self.set_processing_state(False))
             self.root.after(0, lambda: self.add_info(f"❌ Decryption failed: {error_msg}", "error"))
-            self.root.after(0, lambda: messagebox.showerror("Decryption Failed",
-                                                            f"Failed to unlock folder:\n\n{error_msg}"))
+            self.root.after(0,
+                            lambda: messagebox.showerror("Decryption Failed",
+                                                         f"Failed to unlock folder:\n\n{error_msg}"))
 
             # Add to history
             try:
+                folder_name = Path(encrypted_file).stem
                 self.config.add_to_history("decrypt", folder_name, "failed")
             except:
                 pass
 
     def show_locked_folders(self):
-        """Enhanced locked folders display"""
+        """Show list of locked folders"""
         passwords = self.config.load_passwords()
 
         if not passwords:
-            messagebox.showinfo("Information", "No locked folders found")
+            messagebox.showinfo("No Locked Folders", "No locked folders found.")
             return
 
-        # Create modern folders window
-        folders_window = tk.Toplevel(self.root)
-        folders_window.title("Locked Folders Manager")
-        folders_window.geometry("600x400")
-        folders_window.grab_set()
-        folders_window.resizable(True, True)
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Locked Folders")
+        dialog.geometry("600x400")
+        dialog.resizable(True, True)
+        dialog.grab_set()
+        dialog.transient(self.root)
 
-        # Set icon
-        try:
-            folders_window.iconbitmap(self.root.tk.call('wm', 'iconbitmap', self.root))
-        except:
-            pass
+        # Center dialog
+        self.center_dialog(dialog)
 
         # Main frame
-        main_frame = ttk.Frame(folders_window, padding="15")
+        main_frame = ttk.Frame(dialog, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Header
-        header_frame = ttk.Frame(main_frame)
-        header_frame.pack(fill=tk.X, pady=(0, 15))
+        # Title
+        ttk.Label(main_frame, text="🔒 Locked Folders", font=('Segoe UI', 14, 'bold')).pack(pady=(0, 15))
 
-        ttk.Label(header_frame, text="🔒 Locked Folders Manager",
-                  font=('Segoe UI', 14, 'bold')).pack(side=tk.LEFT)
-
-        ttk.Label(header_frame, text=f"Total: {len(passwords)} folders",
-                  font=('Segoe UI', 10)).pack(side=tk.RIGHT)
-
-        # Treeview with detailed information
-        tree_frame = ttk.Frame(main_frame)
-        tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
-
-        columns = ('Size', 'Created', 'Access Count')
-        tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', height=15)
+        # Treeview for folders
+        columns = ('Folder', 'Created', 'Access Count', 'File Path')
+        tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=15)
 
         # Configure columns
-        tree.heading('#0', text='Folder Name')
-        tree.heading('Size', text='Size')
+        tree.heading('Folder', text='Folder Name')
         tree.heading('Created', text='Created')
         tree.heading('Access Count', text='Access Count')
+        tree.heading('File Path', text='File Path')
 
-        tree.column('#0', width=250)
-        tree.column('Size', width=100)
-        tree.column('Created', width=150)
+        tree.column('Folder', width=150)
+        tree.column('Created', width=120)
         tree.column('Access Count', width=100)
+        tree.column('File Path', width=200)
 
-        # Scrollbars
-        v_scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
-        h_scrollbar = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=tree.xview)
-        tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
 
-        # Populate tree
+        # Pack treeview and scrollbar
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Populate data
         for folder_name, data in passwords.items():
             if isinstance(data, dict):
-                # Try to get file info
-                file_path = data.get('file_path')
-                size_str = "Unknown"
-                if file_path and os.path.exists(file_path):
-                    try:
-                        size = os.path.getsize(file_path)
-                        size_str = f"{size / (1024 * 1024):.1f} MB"
-                    except:
-                        pass
-
                 created = data.get('created', 'Unknown')
                 if created != 'Unknown':
                     try:
@@ -713,8 +893,557 @@ class ModernGUI:
                     except:
                         pass
 
-                access_count =
+                access_count = data.get('access_count', 0)
+                file_path = data.get('file_path', 'Unknown')
+                if file_path and len(file_path) > 50:
+                    file_path = "..." + file_path[-47:]
+            else:
+                created = 'Unknown'
+                access_count = 0
+                file_path = 'Unknown'
+
+            tree.insert('', tk.END, values=(folder_name, created, access_count, file_path))
+
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(15, 0))
+
+        ttk.Button(button_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT)
+        ttk.Button(button_frame, text="Refresh", command=lambda: self.refresh_locked_folders(tree)).pack(side=tk.RIGHT,
+                                                                                                         padx=(0, 10))
+
+    def show_password_manager(self):
+        """Show password manager dialog"""
+        passwords = self.config.load_passwords()
+
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Password Manager")
+        dialog.geometry("500x400")
+        dialog.resizable(True, True)
+        dialog.grab_set()
+        dialog.transient(self.root)
+
+        # Center dialog
+        self.center_dialog(dialog)
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        ttk.Label(main_frame, text="🔑 Password Manager", font=('Segoe UI', 14, 'bold')).pack(pady=(0, 15))
+
+        if not passwords:
+            ttk.Label(main_frame, text="No saved passwords found.", font=('Segoe UI', 10)).pack(pady=20)
+            ttk.Button(main_frame, text="Close", command=dialog.destroy).pack()
+            return
+
+        # Listbox for folders
+        listbox_frame = ttk.Frame(main_frame)
+        listbox_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+
+        listbox = tk.Listbox(listbox_frame, font=('Segoe UI', 10))
+        scrollbar = ttk.Scrollbar(listbox_frame, orient=tk.VERTICAL, command=listbox.yview)
+        listbox.configure(yscrollcommand=scrollbar.set)
+
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Populate listbox
+        for folder_name in passwords.keys():
+            listbox.insert(tk.END, folder_name)
+
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+
+        def remove_selected():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("No Selection", "Please select a folder to remove.")
+                return
+
+            folder_name = listbox.get(selection[0])
+            if messagebox.askyesno("Confirm Removal",
+                                   f"Remove password for '{folder_name}'?\n\nThis will not affect the encrypted file."):
+                self.config.remove_password(folder_name)
+                listbox.delete(selection[0])
+                self.add_info(f"🗑️ Password removed for: {folder_name}", "warning")
+
+        ttk.Button(button_frame, text="Remove Selected", command=remove_selected).pack(side=tk.LEFT)
+        ttk.Button(button_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT)
+
+    def show_activity_history(self):
+        """Show activity history dialog"""
+        history = self.config.load_history()
+
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Activity History")
+        dialog.geometry("700x500")
+        dialog.resizable(True, True)
+        dialog.grab_set()
+        dialog.transient(self.root)
+
+        # Center dialog
+        self.center_dialog(dialog)
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        ttk.Label(main_frame, text="📊 Activity History", font=('Segoe UI', 14, 'bold')).pack(pady=(0, 15))
+
+        if not history:
+            ttk.Label(main_frame, text="No activity history found.", font=('Segoe UI', 10)).pack(pady=20)
+            ttk.Button(main_frame, text="Close", command=dialog.destroy).pack()
+            return
+
+        # Treeview for history
+        columns = ('Time', 'Action', 'Folder', 'Status')
+        tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=20)
+
+        # Configure columns
+        tree.heading('Time', text='Timestamp')
+        tree.heading('Action', text='Action')
+        tree.heading('Folder', text='Folder Name')
+        tree.heading('Status', text='Status')
+
+        tree.column('Time', width=150)
+        tree.column('Action', width=100)
+        tree.column('Folder', width=200)
+        tree.column('Status', width=100)
+
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        # Pack treeview and scrollbar
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Populate data (reverse order - newest first)
+        for entry in reversed(history):
+            timestamp = entry.get('timestamp', 'Unknown')
+            if timestamp != 'Unknown':
+                try:
+                    dt = datetime.fromisoformat(timestamp)
+                    timestamp = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except:
+                    pass
+
+            action = entry.get('action', 'Unknown').title()
+            folder_name = entry.get('folder_name', 'Unknown')
+            status = entry.get('status', 'Unknown').title()
+
+            # Add status emoji
+            if status == 'Success':
+                status = '✅ Success'
+            elif status == 'Failed':
+                status = '❌ Failed'
+
+            tree.insert('', tk.END, values=(timestamp, action, folder_name, status))
+
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(15, 0))
+
+        def clear_history():
+            if messagebox.askyesno("Clear History", "Clear all activity history?"):
+                # Clear history by creating empty file
+                with open(self.config.history_file, 'w') as f:
+                    json.dump([], f)
+                dialog.destroy()
+                self.add_info("🧹 Activity history cleared", "warning")
+
+        ttk.Button(button_frame, text="Clear History", command=clear_history).pack(side=tk.LEFT)
+        ttk.Button(button_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT)
+
+    def show_settings(self):
+        """Show settings dialog"""
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Settings")
+        dialog.geometry("400x300")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        dialog.transient(self.root)
+
+        # Center dialog
+        self.center_dialog(dialog)
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        ttk.Label(main_frame, text="⚙️ Settings", font=('Segoe UI', 14, 'bold')).pack(pady=(0, 20))
+
+        # Settings frame
+        settings_frame = ttk.LabelFrame(main_frame, text="Application Settings", padding="15")
+        settings_frame.pack(fill=tk.X, pady=(0, 15))
+
+        # Auto hide files setting
+        auto_hide_var = tk.BooleanVar(value=self.config.get_config_value('auto_hide_files', True))
+        ttk.Checkbutton(settings_frame, text="Auto-hide encrypted files (Windows)",
+                        variable=auto_hide_var).pack(anchor=tk.W, pady=(0, 10))
+
+        # Theme setting
+        theme_frame = ttk.Frame(settings_frame)
+        theme_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(theme_frame, text="Theme:").pack(side=tk.LEFT)
+        theme_var = tk.StringVar(value=self.config.get_config_value('theme', 'default'))
+        theme_combo = ttk.Combobox(theme_frame, textvariable=theme_var,
+                                   values=['default', 'dark', 'light'], state='readonly')
+        theme_combo.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Log level setting
+        log_frame = ttk.Frame(settings_frame)
+        log_frame.pack(fill=tk.X)
+
+        ttk.Label(log_frame, text="Log Level:").pack(side=tk.LEFT)
+        log_var = tk.StringVar(value=self.config.get_config_value('log_level', 'INFO'))
+        log_combo = ttk.Combobox(log_frame, textvariable=log_var,
+                                 values=['DEBUG', 'INFO', 'WARNING', 'ERROR'], state='readonly')
+        log_combo.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+
+        def save_settings():
+            self.config.set_config_value('auto_hide_files', auto_hide_var.get())
+            self.config.set_config_value('theme', theme_var.get())
+            self.config.set_config_value('log_level', log_var.get())
+            messagebox.showinfo("Settings Saved", "Settings have been saved successfully!")
+            dialog.destroy()
+
+        ttk.Button(button_frame, text="Save", command=save_settings).pack(side=tk.RIGHT)
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.RIGHT, padx=(0, 10))
+
+    def show_about(self):
+        """Show about dialog"""
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("About")
+        dialog.geometry("450x400")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        dialog.transient(self.root)
+
+        # Center dialog
+        self.center_dialog(dialog)
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="30")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Icon and title
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(pady=(0, 20))
+
+        ttk.Label(title_frame, text="🔒", font=('Segoe UI', 32)).pack()
+        ttk.Label(title_frame, text="Advanced Folder Locker", font=('Segoe UI', 16, 'bold')).pack(pady=(10, 0))
+        ttk.Label(title_frame, text="Version 2.0.0", font=('Segoe UI', 10)).pack()
+
+        # Description
+        desc_text = """Military-grade folder encryption with AES-256 encryption and PBKDF2 key derivation.
+
+Features:
+• AES-256 encryption with 100,000 PBKDF2 iterations
+• Secure password hashing and storage
+• Enhanced password strength validation
+• Activity logging and history tracking
+• Modern, user-friendly interface
+• Cross-platform compatibility
+
+Developed with security and usability in mind."""
+
+        ttk.Label(main_frame, text=desc_text, font=('Segoe UI', 9), justify=tk.LEFT).pack(pady=(0, 20))
+
+        # Links frame
+        links_frame = ttk.Frame(main_frame)
+        links_frame.pack(pady=(0, 20))
+
+        def open_github():
+            webbrowser.open("https://github.com/othmanmuhammadc/AdvancedFolderLocker")
+
+        ttk.Button(links_frame, text="🌐 GitHub Repository", command=open_github).pack(pady=(0, 5))
+
+        # Close button
+        ttk.Button(main_frame, text="Close", command=dialog.destroy).pack()
+
+    def show_help(self):
+        """Show help dialog"""
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Help")
+        dialog.geometry("600x500")
+        dialog.resizable(True, True)
+        dialog.grab_set()
+        dialog.transient(self.root)
+
+        # Center dialog
+        self.center_dialog(dialog)
+
+        # Main frame
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        ttk.Label(main_frame, text="❓ Help & Instructions", font=('Segoe UI', 14, 'bold')).pack(pady=(0, 15))
+
+        # Help text
+        help_text = ScrolledText(main_frame, height=25, width=70, font=('Segoe UI', 9), wrap=tk.WORD)
+        help_text.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+
+        help_content = """ADVANCED FOLDER LOCKER - HELP GUIDE
+
+🔐 LOCKING FOLDERS:
+1. Click "Lock Folder" or press Ctrl+L
+2. Select the folder you want to encrypt
+3. Create a strong password (recommended: 12+ characters with mixed case, numbers, and symbols)
+4. Confirm your password
+5. The folder will be encrypted and the original folder removed
+
+🔓 UNLOCKING FOLDERS:
+1. Click "Unlock Folder" or press Ctrl+U
+2. Select the .locked file
+3. Enter the correct password
+4. The folder will be restored and the encrypted file removed
+
+🔑 PASSWORD SECURITY:
+• Use strong, unique passwords for each folder
+• Passwords are hashed using PBKDF2 with 100,000 iterations
+• Lost passwords cannot be recovered - keep them safe!
+• Consider using a password manager
+
+📋 MANAGING LOCKED FOLDERS:
+• View all locked folders and their information
+• Remove saved password hashes (doesn't affect encrypted files)
+• Monitor access counts and creation dates
+
+📊 ACTIVITY HISTORY:
+• Track all encryption/decryption operations
+• View timestamps and operation status
+• Clear history when needed
+
+⚙️ SETTINGS:
+• Configure auto-hide for encrypted files (Windows)
+• Adjust logging levels
+• Customize application theme
+
+🔒 SECURITY FEATURES:
+• AES-256 encryption (military-grade)
+• PBKDF2 key derivation with salt
+• Secure random salt generation
+• Password strength validation
+• Encrypted file format with metadata
+
+⌨️ KEYBOARD SHORTCUTS:
+• Ctrl+L: Lock Folder
+• Ctrl+U: Unlock Folder
+• Ctrl+Q: Exit Application
+• F1: Show Help
+• F5: Refresh Statistics
+
+⚠️ IMPORTANT NOTES:
+• Always backup important data before encryption
+• Keep passwords secure - they cannot be recovered
+• Encrypted files are portable across systems
+• Original folders are permanently deleted after encryption
+• Ensure sufficient disk space for encryption process
+
+🛠️ TROUBLESHOOTING:
+• If encryption fails, check folder permissions and disk space
+• For decryption issues, verify password and file integrity
+• Check activity log for detailed error information
+• Restart application if interface becomes unresponsive
+
+For more information and updates, visit:
+https://github.com/othmanmuhammadc/AdvancedFolderLocker"""
+
+        help_text.insert(tk.END, help_content)
+        help_text.config(state=tk.DISABLED)
+
+        # Close button
+        ttk.Button(main_frame, text="Close", command=dialog.destroy).pack()
+
+    def clear_all_data(self):
+        """Clear all application data"""
+        if not messagebox.askyesno("Clear All Data",
+                                   "This will remove all saved passwords and history.\n\n"
+                                   "Encrypted files will NOT be affected.\n\n"
+                                   "Continue?"):
+            return
+
+        try:
+            self.config.clear_all_data()
+            self.add_info("🧹 All application data cleared", "warning")
+            self.refresh_stats()
+            messagebox.showinfo("Data Cleared", "All application data has been cleared successfully!")
+        except Exception as e:
+            error_msg = str(e)
+            self.add_info(f"❌ Failed to clear data: {error_msg}", "error")
+            messagebox.showerror("Error", f"Failed to clear data:\n\n{error_msg}")
+
+    def clear_log(self):
+        """Clear the activity log"""
+        self.info_text.delete(1.0, tk.END)
+        self.add_info("📝 Activity log cleared", "info")
+
+    def save_log(self):
+        """Save activity log to file"""
+        try:
+            log_content = self.info_text.get(1.0, tk.END)
+
+            file_path = filedialog.asksaveasfilename(
+                title="Save Activity Log",
+                defaultextension=".txt",
+                filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
+            )
+
+            if file_path:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(f"Advanced Folder Locker - Activity Log\n")
+                    f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write("=" * 50 + "\n\n")
+                    f.write(log_content)
+
+                self.add_info(f"💾 Log saved to: {Path(file_path).name}", "success")
+                messagebox.showinfo("Log Saved", f"Activity log saved successfully!\n\n{file_path}")
+
+        except Exception as e:
+            error_msg = str(e)
+            self.add_info(f"❌ Failed to save log: {error_msg}", "error")
+            messagebox.showerror("Error", f"Failed to save log:\n\n{error_msg}")
+
+    def refresh_stats(self):
+        """Refresh statistics display"""
+        # This would typically update the stats panel
+        # For now, we'll just add a log entry
+        self.add_info("🔄 Statistics refreshed", "info")
+
+    def refresh_locked_folders(self, tree):
+        """Refresh locked folders list"""
+        # Clear existing items
+        for item in tree.get_children():
+            tree.delete(item)
+
+        # Reload data
+        passwords = self.config.load_passwords()
+        for folder_name, data in passwords.items():
+            if isinstance(data, dict):
+                created = data.get('created', 'Unknown')
+                if created != 'Unknown':
+                    try:
+                        created_dt = datetime.fromisoformat(created)
+                        created = created_dt.strftime("%Y-%m-%d %H:%M")
+                    except:
+                        pass
+
+                access_count = data.get('access_count', 0)
+                file_path = data.get('file_path', 'Unknown')
+                if file_path and len(file_path) > 50:
+                    file_path = "..." + file_path[-47:]
+            else:
+                created = 'Unknown'
+                access_count = 0
+                file_path = 'Unknown'
+
+            tree.insert('', tk.END, values=(folder_name, created, access_count, file_path))
+
+    def center_window(self):
+        """Center the main window on screen"""
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
+    def center_dialog(self, dialog):
+        """Center dialog on parent window"""
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+    def load_window_state(self):
+        """Load saved window state"""
+        try:
+            window_state = self.config.get_config_value('window_state', {})
+            if window_state:
+                geometry = window_state.get('geometry')
+                if geometry:
+                    self.root.geometry(geometry)
+        except Exception as e:
+            print(f"Failed to load window state: {e}")
+
+    def save_window_state(self):
+        """Save current window state"""
+        try:
+            window_state = {
+                'geometry': self.root.geometry()
+            }
+            self.config.set_config_value('window_state', window_state)
+        except Exception as e:
+            print(f"Failed to save window state: {e}")
+
+    def run_in_thread(self, target, *args):
+        """Run function in separate thread"""
+        thread = threading.Thread(target=target, args=args, daemon=True)
+        thread.start()
+
+    def on_closing(self):
+        """Handle application closing"""
+        if self.is_processing:
+            if not messagebox.askyesno("Operation in Progress",
+                                       f"An operation is currently in progress: {self.current_operation}\n\n"
+                                       "Closing now may cause data corruption.\n\n"
+                                       "Are you sure you want to exit?"):
+                return
+
+        # Save window state
+        self.save_window_state()
+
+        # Save config
+        self.config.save_config()
+
+        # Add closing message
+        self.add_info("👋 Application closing...", "info")
+
+        # Close application
+        self.root.quit()
+        self.root.destroy()
+
+    def run(self):
+        """Start the GUI application"""
+        try:
+            # Mark first run as complete
+            if self.config.get_config_value('first_run', True):
+                self.config.set_config_value('first_run', False)
+                self.add_info("🎉 Welcome to Advanced Folder Locker! First run setup complete.", "success")
+
+            # Start main loop
+            self.root.mainloop()
+
+        except KeyboardInterrupt:
+            print("\nApplication interrupted by user")
+        except Exception as e:
+            print(f"GUI Error: {e}")
+            messagebox.showerror("Application Error", f"An unexpected error occurred:\n\n{e}")
+        finally:
+            try:
+                self.root.quit()
+            except:
+                pass
 
 
 
-                
+
+
+
