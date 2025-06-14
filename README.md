@@ -94,6 +94,4 @@ A secure Python application for encrypting and protecting folders with password 
 - **"Permission denied" error**: Run the application with appropriate permissions
 - **Encryption fails**: Ensure the folder is not empty and you have write permissions
 
-## License
 
-This project is open source and available under the MIT License.
