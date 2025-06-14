@@ -46,7 +46,9 @@ class Config:
             "theme": "dark",
             "auto_hide_files": True,
             "backup_count": 3,
-            "log_level": "INFO"
+            "log_level": "INFO",
+            "animations_enabled": True,
+            "blur_effects": True
         }
 
         try:
@@ -87,16 +89,17 @@ class Config:
         self.config[key] = value
         self.save_config()
 
-    def save_password(self, folder_name: str, password_hash: str, file_path: str = None):
+    def save_password(self, item_name: str, password_hash: str, file_path: str = None, item_type: str = "folder"):
         """Save encrypted password with metadata"""
         try:
             passwords = self.load_passwords()
 
-            passwords[folder_name] = {
+            passwords[item_name] = {
                 "hash": password_hash,
                 "created": datetime.now().isoformat(),
                 "file_path": file_path,
-                "access_count": 0
+                "access_count": 0,
+                "item_type": item_type  # "folder" or "file"
             }
 
             with open(self.passwords_file, 'w') as f:
@@ -105,7 +108,7 @@ class Config:
             if os.name == 'nt':
                 os.system(f'attrib +h "{self.passwords_file}"')
 
-            self.logger.info(f"Password saved for folder: {folder_name}")
+            self.logger.info(f"Password saved for {item_type}: {item_name}")
 
         except Exception as e:
             self.logger.error(f"Failed to save password: {e}")
@@ -119,13 +122,14 @@ class Config:
                     data = json.load(f)
 
                 # Handle old format (just hash strings)
-                for folder_name, password_data in data.items():
+                for item_name, password_data in data.items():
                     if isinstance(password_data, str):
-                        data[folder_name] = {
+                        data[item_name] = {
                             "hash": password_data,
                             "created": datetime.now().isoformat(),
                             "file_path": None,
-                            "access_count": 0
+                            "access_count": 0,
+                            "item_type": "folder"  # Default to folder for legacy entries
                         }
 
                 return data
@@ -135,15 +139,15 @@ class Config:
             self.logger.error(f"Failed to load passwords: {e}")
             return {}
 
-    def get_password_hash(self, folder_name: str) -> Optional[str]:
-        """Get password hash for folder"""
+    def get_password_hash(self, item_name: str) -> Optional[str]:
+        """Get password hash for item"""
         passwords = self.load_passwords()
-        password_data = passwords.get(folder_name)
+        password_data = passwords.get(item_name)
 
         if password_data:
             # Increment access count
             password_data["access_count"] = password_data.get("access_count", 0) + 1
-            passwords[folder_name] = password_data
+            passwords[item_name] = password_data
 
             try:
                 with open(self.passwords_file, 'w') as f:
@@ -155,20 +159,20 @@ class Config:
 
         return None
 
-    def remove_password(self, folder_name: str):
-        """Remove folder password"""
+    def remove_password(self, item_name: str):
+        """Remove item password"""
         try:
             passwords = self.load_passwords()
-            if folder_name in passwords:
-                del passwords[folder_name]
+            if item_name in passwords:
+                del passwords[item_name]
                 with open(self.passwords_file, 'w') as f:
                     json.dump(passwords, f, indent=2)
-                self.logger.info(f"Password removed for folder: {folder_name}")
+                self.logger.info(f"Password removed for item: {item_name}")
 
         except Exception as e:
             self.logger.error(f"Failed to remove password: {e}")
 
-    def add_to_history(self, action: str, folder_name: str, status: str = "success"):
+    def add_to_history(self, action: str, item_name: str, status: str = "success", item_type: str = "folder"):
         """Add operation to history"""
         try:
             history = self.load_history()
@@ -176,8 +180,9 @@ class Config:
             entry = {
                 "timestamp": datetime.now().isoformat(),
                 "action": action,
-                "folder_name": folder_name,
-                "status": status
+                "item_name": item_name,
+                "status": status,
+                "item_type": item_type
             }
 
             history.append(entry)
@@ -224,8 +229,13 @@ class Config:
         passwords = self.load_passwords()
         history = self.load_history()
 
+        locked_folders = sum(1 for p in passwords.values() if isinstance(p, dict) and p.get("item_type", "folder") == "folder")
+        locked_files = sum(1 for p in passwords.values() if isinstance(p, dict) and p.get("item_type", "folder") == "file")
+
         return {
-            "locked_folders": len(passwords),
+            "locked_folders": locked_folders,
+            "locked_files": locked_files,
+            "total_locked": len(passwords),
             "total_operations": len(history),
             "successful_operations": len([h for h in history if h.get("status") == "success"]),
             "failed_operations": len([h for h in history if h.get("status") == "failed"]),

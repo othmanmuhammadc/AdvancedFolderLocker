@@ -14,7 +14,7 @@ from cryptography.hazmat.backends import default_backend
 
 
 class EncryptionManager:
-    """Enhanced encryption manager with improved security and features"""
+    """Enhanced encryption manager with improved security and file support"""
 
     SALT_SIZE = 16
     IV_SIZE = 16
@@ -86,6 +86,160 @@ class EncryptionManager:
             self.logger.error(f"Failed to create ZIP archive: {e}")
             return False
 
+    def encrypt_file(self, file_path: Union[str, Path], password: str) -> str:
+        """Encrypt individual file with enhanced security"""
+        file_path = Path(file_path)
+
+        try:
+            # Validation
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+
+            if not file_path.is_file():
+                raise ValueError(f"Path is not a file: {file_path}")
+
+            self.logger.info(f"Starting encryption of file: {file_path}")
+
+            # Read file data
+            with open(file_path, 'rb') as f:
+                data = f.read()
+
+            if not data:
+                raise ValueError("File is empty")
+
+            # Generate encryption key with random salt
+            fernet, salt = self.generate_key(password)
+
+            # Encrypt data
+            encrypted_data = fernet.encrypt(data)
+
+            # Create encrypted file
+            encrypted_file = file_path.with_suffix(file_path.suffix + '.locked')
+
+            # Write encrypted file with metadata
+            with open(encrypted_file, 'wb') as f:
+                # Write file header
+                f.write(b'AFL2')  # Advanced Folder Locker v2 signature
+                f.write(b'FILE')  # File type marker
+                f.write(len(salt).to_bytes(4, byteorder='big'))
+                f.write(salt)
+                f.write(len(file_path.suffix.encode()).to_bytes(4, byteorder='big'))
+                f.write(file_path.suffix.encode())  # Original extension
+                f.write(len(encrypted_data).to_bytes(8, byteorder='big'))
+                f.write(encrypted_data)
+
+            # Verify encrypted file
+            if not encrypted_file.exists() or encrypted_file.stat().st_size == 0:
+                raise RuntimeError("Failed to create encrypted file")
+
+            # Remove original file only after successful encryption
+            try:
+                file_path.unlink()
+                self.logger.info(f"Original file removed: {file_path}")
+            except Exception as e:
+                self.logger.warning(f"Failed to remove original file: {e}")
+
+            # Hide encrypted file on Windows
+            if os.name == 'nt':
+                try:
+                    os.system(f'attrib +h "{encrypted_file}"')
+                except Exception as e:
+                    self.logger.warning(f"Failed to hide encrypted file: {e}")
+
+            self.logger.info(f"File encrypted successfully: {encrypted_file}")
+            return str(encrypted_file)
+
+        except Exception as e:
+            self.logger.error(f"File encryption failed: {e}")
+            raise
+
+    def decrypt_file(self, encrypted_file_path: Union[str, Path], password: str) -> str:
+        """Decrypt individual file with enhanced security and validation"""
+        encrypted_file_path = Path(encrypted_file_path)
+
+        try:
+            # Validation
+            if not encrypted_file_path.exists():
+                raise FileNotFoundError(f"Encrypted file not found: {encrypted_file_path}")
+
+            if not encrypted_file_path.is_file():
+                raise ValueError(f"Path is not a file: {encrypted_file_path}")
+
+            self.logger.info(f"Starting decryption of file: {encrypted_file_path}")
+
+            # Read encrypted file
+            with open(encrypted_file_path, 'rb') as f:
+                # Check file signature
+                signature = f.read(4)
+                if signature != b'AFL2':
+                    raise ValueError("Invalid file format: not an AFL2 file")
+
+                # Check if it's a file (not folder)
+                file_marker = f.read(4)
+                if file_marker != b'FILE':
+                    raise ValueError("This is not an encrypted file")
+
+                salt_length = int.from_bytes(f.read(4), byteorder='big')
+                salt = f.read(salt_length)
+
+                ext_length = int.from_bytes(f.read(4), byteorder='big')
+                original_extension = f.read(ext_length).decode()
+
+                data_length = int.from_bytes(f.read(8), byteorder='big')
+                encrypted_data = f.read(data_length)
+
+            # Validate data
+            if len(salt) != self.SALT_SIZE:
+                raise ValueError("Invalid file format: corrupted salt")
+
+            if not encrypted_data:
+                raise ValueError("Invalid file format: no encrypted data")
+
+            # Decrypt data
+            try:
+                fernet, _ = self.generate_key(password, salt)
+                decrypted_data = fernet.decrypt(encrypted_data)
+            except InvalidToken:
+                raise ValueError("Invalid password or corrupted file")
+
+            # Determine output file name
+            base_name = encrypted_file_path.stem
+            if base_name.endswith('.locked'):
+                base_name = base_name[:-7]  # Remove .locked
+
+            output_file = encrypted_file_path.parent / (base_name + original_extension)
+
+            # Handle naming conflicts
+            counter = 1
+            original_output = output_file
+            while output_file.exists():
+                name_part = original_output.stem
+                ext_part = original_output.suffix
+                output_file = original_output.parent / f"{name_part}_{counter}{ext_part}"
+                counter += 1
+
+            # Write decrypted file
+            with open(output_file, 'wb') as f:
+                f.write(decrypted_data)
+
+            # Verify decryption
+            if not output_file.exists():
+                raise RuntimeError("Decryption failed: output file not created")
+
+            # Remove encrypted file only after successful decryption
+            try:
+                encrypted_file_path.unlink()
+                self.logger.info(f"Encrypted file removed: {encrypted_file_path}")
+            except Exception as e:
+                self.logger.warning(f"Failed to remove encrypted file: {e}")
+
+            self.logger.info(f"File decrypted successfully: {output_file}")
+            return str(output_file)
+
+        except Exception as e:
+            self.logger.error(f"File decryption failed: {e}")
+            raise
+
     def encrypt_folder(self, folder_path: Union[str, Path], password: str) -> str:
         """Encrypt folder with enhanced security and progress tracking"""
         folder_path = Path(folder_path)
@@ -134,6 +288,7 @@ class EncryptionManager:
             with open(encrypted_file, 'wb') as f:
                 # Write file header
                 f.write(b'AFL2')  # Advanced Folder Locker v2 signature
+                f.write(b'FLDR')  # Folder type marker
                 f.write(len(salt).to_bytes(4, byteorder='big'))
                 f.write(salt)
                 f.write(len(encrypted_data).to_bytes(8, byteorder='big'))
@@ -198,11 +353,16 @@ class EncryptionManager:
                 # Check file signature
                 signature = f.read(4)
                 if signature == b'AFL2':
-                    # New format with metadata
-                    salt_length = int.from_bytes(f.read(4), byteorder='big')
-                    salt = f.read(salt_length)
-                    data_length = int.from_bytes(f.read(8), byteorder='big')
-                    encrypted_data = f.read(data_length)
+                    # Check if it's a folder
+                    folder_marker = f.read(4)
+                    if folder_marker == b'FLDR':
+                        # New folder format with metadata
+                        salt_length = int.from_bytes(f.read(4), byteorder='big')
+                        salt = f.read(salt_length)
+                        data_length = int.from_bytes(f.read(8), byteorder='big')
+                        encrypted_data = f.read(data_length)
+                    else:
+                        raise ValueError("This is not an encrypted folder")
                 else:
                     # Legacy format
                     f.seek(0)
@@ -316,8 +476,16 @@ class EncryptionManager:
                 signature = f.read(4)
                 if signature == b'AFL2':
                     version = "2.0"
+                    type_marker = f.read(4)
+                    if type_marker == b'FILE':
+                        item_type = "file"
+                    elif type_marker == b'FLDR':
+                        item_type = "folder"
+                    else:
+                        item_type = "unknown"
                 else:
                     version = "1.0"
+                    item_type = "folder"  # Legacy files were folders
 
             return {
                 "filename": encrypted_file_path.name,
@@ -325,11 +493,13 @@ class EncryptionManager:
                 "created": stat.st_ctime,
                 "modified": stat.st_mtime,
                 "version": version,
-                "folder_name": encrypted_file_path.stem
+                "item_type": item_type,
+                "item_name": encrypted_file_path.stem
             }
 
         except Exception as e:
             return {"error": str(e)}
+
 
 
 
