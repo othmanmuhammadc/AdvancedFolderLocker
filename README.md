@@ -4,7 +4,7 @@ A secure desktop application for encrypting and decrypting files using password-
 
 ## Overview
 
-STARK File Locker is a Python desktop tool that provides secure file encryption and decryption capabilities. The application features a modern dark mode interface and handles the complete encryption workflow - from securing your original files to safely restoring them when needed.
+File Locker is a Python desktop tool that provides secure file encryption and decryption capabilities. The application features a modern dark mode interface and handles the complete encryption workflow - from securing your original files to safely restoring them when needed.
 
 ## Features
 
@@ -48,7 +48,7 @@ python "RUN ME.py"
 
 ### Encrypting Files
 
-1. Launch STARK File Locker
+1. Launch  File Locker
 2. Drag and drop files into the application or use "Add Files" button
 3. Enter a strong password in the password field
 4. Click "Lock Selected Items"
