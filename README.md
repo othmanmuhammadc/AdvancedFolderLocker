@@ -1,4 +1,4 @@
-# STARK File Locker
+# File Locker
 
 A secure desktop application for encrypting and decrypting files using password-based AES encryption with a simple, intuitive GUI.
 
